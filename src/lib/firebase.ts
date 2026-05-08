@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, query, where
 import firebaseConfigPlaceholder from '../../firebase-applet-config.json';
 
 const getFirebaseConfig = () => {
-  const envConfig = (import.meta as any).env?.VITE_FIREBASE_CONFIG;
+  const envConfig = import.meta.env.VITE_FIREBASE_CONFIG;
   if (envConfig) {
     try {
       return JSON.parse(envConfig);

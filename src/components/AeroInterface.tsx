@@ -462,8 +462,13 @@ export default function AeroInterface() {
     try {
       await signInWithGoogle();
       queueAudioChunk("Authentication successful, sir. Systems are online.");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      if (err.code === 'auth/unauthorized-domain') {
+        alert("Domain Not Authorized: Please add this Vercel domain to your Firebase Console under Authentication > Settings > Authorized Domains.");
+      } else {
+        alert("Login failed: " + (err.message || "Unknown error"));
+      }
     }
   };
 
