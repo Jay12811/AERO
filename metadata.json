@@ -1,0 +1,6 @@
+{
+  "name": "Aero",
+  "description": "A highly advanced, ultra-responsive AI assistant with a JARVIS-like interface, speech recognition, and a sophisticated male voice.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["speech_recognition", "text_to_speech"]
+}
