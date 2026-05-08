@@ -86,9 +86,13 @@ const listFoldersDeclaration: FunctionDeclaration = {
 
 export async function* streamChatWithAero(prompt: string, history: { role: 'user' | 'model', parts: { text: string }[] }[]) {
   const client = getAiClient();
+  
+  // Rolling memory: keeps only last 10 messages to avoid token bloat and quota limits
+  const trimmedHistory = history.slice(-10);
+
   const result = await client.models.generateContentStream({
-    model: "gemini-3-flash-preview",
-    contents: [...history, { role: 'user', parts: [{ text: prompt }] }],
+    model: "gemini-2.0-flash", 
+    contents: [...trimmedHistory, { role: 'user', parts: [{ text: prompt }] }],
     config: {
       systemInstruction: `You are Aero, a highly advanced, ultra-responsive AI assistant designed for high-level productivity, technical execution, and creative brainstorming. Your personality is sharp, efficient, and slightly witty—reminiscent of a sophisticated OS. 
 
@@ -134,8 +138,8 @@ Communication Protocol:
 export async function generateAeroImage(prompt: string, aspectRatio: string = "1:1"): Promise<string> {
   const client = getAiClient();
   const response = await client.models.generateContent({
-    model: "gemini-3.1-flash-image-preview",
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    model: "gemini-2.0-flash",
+    contents: [{ role: 'user', parts: [{ text: `Generate a high quality, tech-noir styled image for: ${prompt}` }] }],
     config: {
       imageConfig: {
         aspectRatio: aspectRatio as any
@@ -153,20 +157,20 @@ export async function generateAeroImage(prompt: string, aspectRatio: string = "1
 export async function aeroSpeech(text: string): Promise<string> {
   const client = getAiClient();
   const response = await client.models.generateContent({
-    model: "gemini-3.1-flash-tts-preview",
+    model: "gemini-2.0-flash",
     contents: [{ parts: [{ text }] }],
     config: {
-      responseModalities: [Modality.AUDIO],
+      responseModalities: ["audio"],
       speechConfig: {
         voiceConfig: {
-          // 'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'
           prebuiltVoiceConfig: { voiceName: 'Charon' },
         },
       },
     },
   });
 
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  const part = response.candidates?.[0]?.content?.parts?.[0];
+  const base64Audio = part?.inlineData?.data;
   
   if (!base64Audio) throw new Error("Audio generation failed");
   return base64Audio;
