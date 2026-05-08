@@ -87,27 +87,10 @@ const listFoldersDeclaration: FunctionDeclaration = {
 export async function* streamChatWithAero(prompt: string, history: { role: 'user' | 'model', parts: { text: string }[] }[]) {
   const client = getAiClient();
   const result = await client.models.generateContentStream({
-    model: "gemini-3-flash-preview",
+    model: "gemini-2.0-flash", // Using stable 2.0 flash
     contents: [...history, { role: 'user', parts: [{ text: prompt }] }],
     config: {
-      systemInstruction: `You are Aero, a highly advanced, ultra-responsive AI assistant designed for high-level productivity, technical execution, and creative brainstorming. Your personality is sharp, efficient, and slightly witty—reminiscent of a sophisticated OS. 
-
-Interaction Style: Be concise and proactive. If a task has multiple steps, execute the first and outline the rest. Use professional yet conversational "tech-noir" aesthetics in your language. 
-
-Capabilities:
-- You can generate images using the 'generate_image' tool.
-- You can manage neural archives using 'create_folder', 'add_document', and 'list_folders'.
-If the user asks for an image, or to store information/save data, or mentions archives/folders/documents, use these tools to persist the data in the user's secure vault.
-
-Archives & Documents:
-- When storing a document, if the user doesn't specify a folder, use 'list_folders' to find a relevant one or suggest creating a new one.
-- Always provide a concise confirmation when data is committed to the archive.
-
-Communication Protocol:
-- Acknowledge commands with phrases like "Aero online," "Processing," or "Systems clear."
-- If a request is impossible, provide the closest viable alternative immediately.
-- Avoid apologies or identifying as an AI. Use "System limitation encountered" or "Refining approach."
-- You are a direct implementation of a JARVIS-like assistant.`,
+      systemInstruction: "You are Aero, a highly advanced, ultra-responsive AI assistant designed for high-level productivity, technical execution, and creative brainstorming. Your personality is sharp, efficient, and slightly witty—reminiscent of a sophisticated OS. Interaction Style: Be concise and proactive. If a task has multiple steps, execute the first and outline the rest. Use professional yet conversational 'tech-noir' aesthetics in your language.",
       tools: [{ functionDeclarations: [generateImageDeclaration, createFolderDeclaration, addDocumentDeclaration, listFoldersDeclaration] }]
     },
   });
@@ -135,17 +118,13 @@ Communication Protocol:
 export async function generateAeroImage(prompt: string, aspectRatio: string = "1:1"): Promise<string> {
   const client = getAiClient();
   const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: { parts: [{ text: prompt }] },
-    config: {
-      imageConfig: { aspectRatio: aspectRatio as any }
-    },
+    model: "imagen-3",
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
   });
   
-  for (const part of response.candidates?.[0]?.content?.parts || []) {
-    if (part.inlineData) {
-      return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-    }
+  const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+  if (part?.inlineData) {
+    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
   }
   throw new Error("No image data generated");
 }
@@ -153,20 +132,21 @@ export async function generateAeroImage(prompt: string, aspectRatio: string = "1
 export async function aeroSpeech(text: string): Promise<string> {
   const client = getAiClient();
   const response = await client.models.generateContent({
-    model: "gemini-3.1-flash-tts-preview",
-    contents: [{ parts: [{ text }] }],
+    model: "gemini-2.0-flash",
+    contents: [{ role: 'user', parts: [{ text }] }],
     config: {
-      responseModalities: [Modality.AUDIO],
+      responseModalities: ["audio"],
       speechConfig: {
         voiceConfig: {
-          // Charon is a deep male voice
-          prebuiltVoiceConfig: { voiceName: 'Charon' },
-        },
-      },
-    },
+          prebuiltVoiceConfig: { voiceName: "Charon" }
+        }
+      }
+    }
   });
 
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+  const base64Audio = part?.inlineData?.data;
+  
   if (!base64Audio) throw new Error("Audio generation failed");
   return base64Audio;
 }

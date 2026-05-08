@@ -46,7 +46,9 @@ const firebaseConfig = getFirebaseConfig();
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 // Use specifically named database if present, otherwise default to '(default)'
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
+export const db = firebaseConfig.firestoreDatabaseId 
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
 export enum OperationType {

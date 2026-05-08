@@ -165,6 +165,11 @@ export default function AeroInterface() {
   const queueAudioChunk = async (text: string) => {
     if (!speechEnabled || !text.trim()) return;
     
+    // Ensure context is active before queuing
+    if (audioContextRef.current?.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+    
     const currentIndex = nextAudioIndexRef.current++;
     
     try {
@@ -342,13 +347,9 @@ export default function AeroInterface() {
           if (name === 'generate_image') {
             const imageArgs = args as { prompt: string, aspectRatio?: string };
 
-            if (!hasApiKey && (imageArgs.aspectRatio === '1:4' || imageArgs.aspectRatio === '4:1' || imageArgs.aspectRatio === '1:8' || imageArgs.aspectRatio === '8:1')) {
-              queueAudioChunk("Sir, this specific visual matrix requires a high-tier API key. Please initialize it in the system settings.");
-            }
-
             const imageMsg: Message = {
               role: 'model',
-              content: `Generating image: "${imageArgs.prompt}"...`,
+              content: `Generating neural visualization: "${imageArgs.prompt}"...`,
               timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
               type: 'image',
               status: 'pending'
@@ -361,22 +362,28 @@ export default function AeroInterface() {
                  ? { ...m, mediaUrl: url, status: 'completed', content: `Neural visualization complete: ${imageArgs.prompt}` } 
                  : m
                ));
-               queueAudioChunk("Visualization complete, sir.");
+               if (speechEnabled) queueAudioChunk("Visualization complete, sir.");
             }).catch(err => {
+               console.error("Image generation failed:", err);
                setMessages(prev => prev.map(m => 
                  (m.type === 'image' && m.status === 'pending' && m.content.includes(imageArgs.prompt)) 
                  ? { ...m, status: 'error', content: `VISUALIZATION FAILURE: ${err.message}` } 
                  : m
                ));
+               if (speechEnabled) queueAudioChunk("Sir, visualization subsystems reported a failure.");
             });
           } else if (name === 'create_folder') {
+            if (!user) {
+              queueAudioChunk("Sir, archival requires a verified identity link. Please initialize the matrix first.");
+              return;
+            }
             const folderArgs = args as { name: string };
             const folderId = Math.random().toString(36).substr(2, 9);
             
             setDoc(doc(db, 'folders', folderId), {
               id: folderId,
               name: folderArgs.name,
-              ownerId: user?.uid,
+              ownerId: user.uid,
               createdAt: serverTimestamp(),
               timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
             }).then(() => {
@@ -386,17 +393,24 @@ export default function AeroInterface() {
                 timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
                 type: 'archive_action'
               }]);
-              queueAudioChunk(`Archive directory ${folderArgs.name} initialized, sir.`);
-            }).catch(err => handleFirestoreError(err, OperationType.CREATE, 'folders'));
+              if (speechEnabled) queueAudioChunk(`Archive directory ${folderArgs.name} initialized, sir.`);
+            }).catch(err => {
+              console.error("Folder creation failed:", err);
+              handleFirestoreError(err, OperationType.CREATE, 'folders');
+            });
 
           } else if (name === 'add_document') {
+            if (!user) {
+              queueAudioChunk("Sir, identity link is required for archive commits.");
+              return;
+            }
             const docArgs = args as { folderId: string, title: string, content: string };
             const docId = Math.random().toString(36).substr(2, 9);
             
             setDoc(doc(db, 'documents', docId), {
               id: docId,
               folderId: docArgs.folderId,
-              ownerId: user?.uid,
+              ownerId: user.uid,
               title: docArgs.title,
               content: docArgs.content,
               createdAt: serverTimestamp(),
@@ -408,9 +422,16 @@ export default function AeroInterface() {
                 timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
                 type: 'archive_action'
               }]);
-              queueAudioChunk(`Document ${docArgs.title} has been committed to the archives.`);
-            }).catch(err => handleFirestoreError(err, OperationType.CREATE, 'documents'));
+              if (speechEnabled) queueAudioChunk(`Document ${docArgs.title} has been committed to the archives.`);
+            }).catch(err => {
+              console.error("Document commit failed:", err);
+              handleFirestoreError(err, OperationType.CREATE, 'documents');
+            });
           } else if (name === 'list_folders') {
+            if (!user) {
+              queueAudioChunk("Sir, remote archive access requires identity verification.");
+              return;
+            }
             const folderList = folders.map(f => `${f.name} (ID: ${f.id})`).join(', ');
             setMessages(prev => [...prev, {
               role: 'model',
@@ -418,6 +439,7 @@ export default function AeroInterface() {
               timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
               type: 'archive_action'
             }]);
+            if (speechEnabled) queueAudioChunk(folderList ? "Archives mapped, sir." : "Neural archives are currently empty.");
           }
         }
       }
