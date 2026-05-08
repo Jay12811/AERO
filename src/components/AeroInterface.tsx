@@ -69,6 +69,7 @@ export default function AeroInterface() {
   const nextAudioIndexRef = useRef(0);
   const audioMapRef = useRef<Map<number, AudioBuffer>>(new Map());
   const playIndexRef = useRef(0);
+  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   // Auth Listener
   useEffect(() => {
@@ -89,23 +90,39 @@ export default function AeroInterface() {
 
     const foldersQuery = query(
       collection(db, 'folders'),
-      where('ownerId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('ownerId', '==', user.uid)
     );
 
     const docsQuery = query(
       collection(db, 'documents'),
-      where('ownerId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('ownerId', '==', user.uid)
     );
 
     const unsubscribeFolders = onSnapshot(foldersQuery, (snapshot) => {
-      setFolders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ArchiveFolder)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'folders'));
+      const folderList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ArchiveFolder));
+      // Sort in-memory to avoids composite index requirement
+      folderList.sort((a, b) => {
+        const timeA = (a.createdAt as any)?.seconds || 0;
+        const timeB = (b.createdAt as any)?.seconds || 0;
+        return timeB - timeA;
+      });
+      setFolders(folderList);
+    }, (error) => {
+      console.error("AERO // Folder sync failure:", error);
+      // Don't throw here to avoid crashing the whole UI
+    });
 
     const unsubscribeDocs = onSnapshot(docsQuery, (snapshot) => {
-      setDocuments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ArchiveDocument)));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'documents'));
+      const docList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ArchiveDocument));
+      docList.sort((a, b) => {
+        const timeA = (a.createdAt as any)?.seconds || 0;
+        const timeB = (b.createdAt as any)?.seconds || 0;
+        return timeB - timeA;
+      });
+      setDocuments(docList);
+    }, (error) => {
+      console.error("AERO // Document sync failure:", error);
+    });
 
     return () => {
       unsubscribeFolders();
@@ -243,7 +260,13 @@ export default function AeroInterface() {
     const source = audioContextRef.current!.createBufferSource();
     source.buffer = nextBuffer;
     source.connect(audioContextRef.current!.destination);
-    source.onended = () => processQueue();
+    source.onended = () => {
+      if (activeSourceRef.current === source) {
+        activeSourceRef.current = null;
+      }
+      processQueue();
+    };
+    activeSourceRef.current = source;
     source.start();
   };
 
@@ -302,6 +325,16 @@ export default function AeroInterface() {
     nextAudioIndexRef.current = 0;
     playIndexRef.current = 0;
     audioMapRef.current.clear();
+
+    // Stop and clear any currently playing audio source
+    if (activeSourceRef.current) {
+      try {
+        activeSourceRef.current.stop();
+      } catch (e) {
+        // Already stopped or not applicable
+      }
+      activeSourceRef.current = null;
+    }
 
     const timestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     setMessages(prev => [...prev, { role: 'user', content: text, timestamp }]);

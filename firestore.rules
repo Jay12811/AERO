@@ -20,7 +20,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId);
       allow create: if isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']);
+      allow update: if isOwner(userId) && request.resource.data.userId == userId;
     }
 
     match /folders/{folderId} {
