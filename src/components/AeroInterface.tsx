@@ -306,7 +306,6 @@ export default function AeroInterface() {
           fullResponse += message.content;
           currentChunk += message.content;
 
-          // Update UI
           setMessages(prev => {
             const next = [...prev];
             const lastMessage = next[next.length - 1];
@@ -316,7 +315,6 @@ export default function AeroInterface() {
             return next;
           });
 
-          // Trigger TTS for completed sentences or substantial blocks
           if (/[.!?](\s|$)/.test(currentChunk) || currentChunk.length > 100) {
             queueAudioChunk(currentChunk.trim());
             currentChunk = "";
@@ -397,9 +395,6 @@ export default function AeroInterface() {
             }).catch(err => handleFirestoreError(err, OperationType.CREATE, 'documents'));
           } else if (name === 'list_folders') {
             const folderList = folders.map(f => `${f.name} (ID: ${f.id})`).join(', ');
-            // We don't need a tool response technically in this stream implementation as it's not a true tool-use loop
-            // but we can add a system message for the next turn if needed.
-            // For now, we'll just show it in the logs.
             setMessages(prev => [...prev, {
               role: 'model',
               content: `MAPPING ARCHIVES: [${folderList || 'Empty'}]`,
@@ -410,17 +405,16 @@ export default function AeroInterface() {
         }
       }
 
-      // Final remaining chunk
       if (currentChunk.trim()) {
         queueAudioChunk(currentChunk.trim());
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Aero processing error:", error);
       const errTimestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const errorMsg = "CRITICAL ERROR: Logic drive failure encountered.";
+      const errorMsg = `CRITICAL ERROR: Logic drive failure encountered. [${error.message || "Unknown Fault"}]`;
       setMessages(prev => [...prev, { role: 'model', content: errorMsg, timestamp: errTimestamp }]);
-      queueAudioChunk(errorMsg);
+      queueAudioChunk("Sir, logic drive failure encountered. System requires diagnostic.");
     } finally {
       setIsProcessing(false);
     }
@@ -463,11 +457,18 @@ export default function AeroInterface() {
       await signInWithGoogle();
       queueAudioChunk("Authentication successful, sir. Systems are online.");
     } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/unauthorized-domain') {
-        alert("Domain Not Authorized: Please add this Vercel domain to your Firebase Console under Authentication > Settings > Authorized Domains.");
+      console.error("Firebase Login Error:", err);
+      const errorCode = err.code || 'unknown';
+      const errorMessage = err.message || 'An unknown error occurred during identity verification.';
+      
+      if (errorCode === 'auth/unauthorized-domain') {
+        alert(`Domain Not Authorized: ${window.location.hostname} is not in the authorized domains list in your Firebase Console. Please add it under Authentication > Settings > Authorized Domains.`);
+      } else if (errorCode === 'auth/invalid-api-key') {
+        alert("Invalid API Key: The Firebase API key provided is invalid or restricted. Please check your environment variables.");
+      } else if (errorCode === 'auth/operation-not-allowed') {
+        alert("Operation Not Allowed: Google Sign-In is not enabled in your Firebase Project. Please enable it in the Firebase Console under Authentication > Sign-in method.");
       } else {
-        alert("Login failed: " + (err.message || "Unknown error"));
+        alert(`Neural Link Failed [${errorCode}]: ${errorMessage}`);
       }
     }
   };

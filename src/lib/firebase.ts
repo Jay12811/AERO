@@ -4,22 +4,49 @@ import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, query, where
 import firebaseConfigPlaceholder from '../../firebase-applet-config.json';
 
 const getFirebaseConfig = () => {
-  const envConfig = import.meta.env.VITE_FIREBASE_CONFIG;
+  const envConfig = (import.meta as any).env?.VITE_FIREBASE_CONFIG;
   if (envConfig) {
     try {
-      return JSON.parse(envConfig);
+      const parsed = JSON.parse(envConfig);
+      console.log(`AERO // Neural link established with remote project: ${parsed.projectId}`);
+      return parsed;
     } catch (e) {
-      console.error("Failed to parse VITE_FIREBASE_CONFIG", e);
+      console.error("AERO // Remote configuration corrupted. Fallback required.", e);
     }
   }
-  return firebaseConfigPlaceholder;
+
+  // Fallback to individual environment variables
+  const individualConfig: any = {
+    apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY,
+    authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID,
+    firestoreDatabaseId: (import.meta as any).env?.VITE_FIREBASE_FIRESTORE_DATABASE_ID
+  };
+
+  // Check if we have at least the core identity variables
+  if (individualConfig.apiKey && individualConfig.projectId) {
+    console.log(`AERO // Remote identity detected: ${individualConfig.projectId}`);
+    return individualConfig;
+  }
+
+  if (firebaseConfigPlaceholder.apiKey && firebaseConfigPlaceholder.apiKey !== "YOUR_API_KEY") {
+    console.log("AERO // Using local node defaults (Internal Build).");
+    return firebaseConfigPlaceholder;
+  }
+
+  console.warn("AERO // CRITICAL: No valid Firebase configuration found. Identity Link will fail.");
+  return individualConfig; // Return the empty config so app doesn't crash but login will show error
 };
 
 const firebaseConfig = getFirebaseConfig();
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || 'default');
+// Use specifically named database if present, otherwise default to '(default)'
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 export const googleProvider = new GoogleAuthProvider();
 
 export enum OperationType {

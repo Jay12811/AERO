@@ -1,15 +1,19 @@
 import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
 
 const getApiKey = () => {
-  return (import.meta.env as any).VITE_GEMINI_API_KEY || (process.env as any).GEMINI_API_KEY || '';
+  const metaEnv = (import.meta as any).env;
+  return metaEnv?.VITE_GEMINI_API_KEY || (process.env as any).GEMINI_API_KEY || '';
 };
 
 const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 function getAiClient() {
-  // Use user-selected API key if available (injected as process.env.API_KEY)
-  // otherwise fallback to the default keys.
-  const apiKey = (process.env as any).API_KEY || getApiKey();
+  const metaEnv = (import.meta as any).env;
+  const apiKey = (process.env as any).API_KEY || metaEnv?.VITE_GEMINI_API_KEY || (process.env as any).GEMINI_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("Neural Core Error: VITE_GEMINI_API_KEY is missing. Please configure environment variables.");
+  }
   return new GoogleGenAI({ apiKey });
 }
 
