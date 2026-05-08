@@ -112,15 +112,23 @@ Communication Protocol:
     },
   });
 
-  for await (const chunk of result) {
-    if (chunk.text) {
-      yield { type: 'text', content: chunk.text };
-    }
-    if (chunk.functionCalls) {
-      for (const call of chunk.functionCalls) {
-        yield { type: 'function_call', call };
+  try {
+    for await (const chunk of result) {
+      const text = chunk.text;
+      if (text) {
+        yield { type: 'text', content: text };
+      }
+      
+      const calls = chunk.functionCalls;
+      if (calls && calls.length > 0) {
+        for (const call of calls) {
+          yield { type: 'function_call', call };
+        }
       }
     }
+  } catch (err: any) {
+    console.error("Neural Stream Interrupted:", err);
+    throw new Error(`Neural feedback loop failure: ${err.message || "Connection lost"}`);
   }
 }
 

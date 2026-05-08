@@ -168,7 +168,14 @@ export default function AeroInterface() {
     const currentIndex = nextAudioIndexRef.current++;
     
     try {
-      const base64 = await aeroSpeech(text);
+      const base64 = await aeroSpeech(text).catch(err => {
+        console.warn(`AERO // Failed to generate neural vocal for chunk ${currentIndex}:`, err);
+        // Put a null or marker in the map to indicate this chunk is "done" but empty
+        audioMapRef.current.set(currentIndex, null as any);
+        if (!isPlayingRef.current) processQueue();
+        return null;
+      });
+
       if (!base64) return;
       
       const binaryString = atob(base64);
@@ -201,22 +208,32 @@ export default function AeroInterface() {
       }
     } catch (error) {
       console.error("Audio queue error:", error);
+      // Mark as done even on error to prevent queue stalls
+      audioMapRef.current.set(currentIndex, null as any);
+      if (!isPlayingRef.current) processQueue();
     }
   };
 
   const processQueue = async () => {
-    const nextBuffer = audioMapRef.current.get(playIndexRef.current);
-    
-    if (!nextBuffer) {
+    // Check if the current required index exists in the map (even if null)
+    if (!audioMapRef.current.has(playIndexRef.current)) {
       isPlayingRef.current = false;
       setIsSpeaking(false);
       return;
     }
 
-    isPlayingRef.current = true;
-    setIsSpeaking(true);
+    const nextBuffer = audioMapRef.current.get(playIndexRef.current);
     audioMapRef.current.delete(playIndexRef.current);
     playIndexRef.current++;
+
+    if (!nextBuffer) {
+      // It was a hole or failed chunk, move to next immediately
+      processQueue();
+      return;
+    }
+
+    isPlayingRef.current = true;
+    setIsSpeaking(true);
 
     const source = audioContextRef.current!.createBufferSource();
     source.buffer = nextBuffer;
@@ -410,10 +427,23 @@ export default function AeroInterface() {
       }
 
     } catch (error: any) {
-      console.error("Aero processing error:", error);
+      console.error("AERO // Processing Interruption:", error);
       const errTimestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const errorMsg = `CRITICAL ERROR: Logic drive failure encountered. [${error.message || "Unknown Fault"}]`;
-      setMessages(prev => [...prev, { role: 'model', content: errorMsg, timestamp: errTimestamp }]);
+      
+      let errorDetail = error.message || "Unknown neural fault";
+      if (errorDetail.includes("VITE_GEMINI_API_KEY")) {
+        errorDetail = "Neural API key missing from configuration.";
+      } else if (errorDetail.includes("429") || errorDetail.includes("quota")) {
+        errorDetail = "Neural bandwidth exceeded (Rate limit). Please wait for node reset.";
+      }
+      
+      const errorMsg = `CRITICAL FAULT: [${errorDetail}]`;
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        content: errorMsg, 
+        timestamp: errTimestamp,
+        status: 'error'
+      }]);
       queueAudioChunk("Sir, logic drive failure encountered. System requires diagnostic.");
     } finally {
       setIsProcessing(false);
